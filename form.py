@@ -12,62 +12,55 @@ st.set_page_config(
     page_icon="🔮",
     layout="centered"
 )
+
+# -------------------- Google Sheets Connection --------------------
 @st.cache_resource
 def get_google_sheet():
-    # Load credentials from Streamlit Secrets
-    secrets = st.secrets["gcp_service_account"]
-    
-    # Define the scope
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive"
-    ]
-    
-    # Authenticate
-    creds = Credentials.from_service_account_info(secrets, scopes=scopes)
-    client = gspread.authorize(creds)
-    
-    # Open the sheet by URL (Put your actual sheet URL in secrets too, or hardcode it)
-    sheet_url = st.secrets["private_sheet_url"]
-    return client.open_by_url(sheet_url).sheet1
+    """Connects to Google Sheets using Streamlit Secrets."""
+    try:
+        # Load credentials from secrets.toml
+        secrets = st.secrets["gcp_service_account"]
+        
+        # Define the scope
+        scopes = [
+            "https://www.googleapis.com/auth/spreadsheets",
+            "https://www.googleapis.com/auth/drive"
+        ]
+        
+        # Authenticate
+        creds = Credentials.from_service_account_info(secrets, scopes=scopes)
+        client = gspread.authorize(creds)
+        
+        # Open the sheet by URL
+        sheet_url = st.secrets["private_sheet_url"]
+        return client.open_by_url(sheet_url).sheet1
+    except Exception as e:
+        st.error(f"❌ Connection Error: {e}")
+        return None
 
 def load_data():
-    try:
-        sheet = get_google_sheet()
-        # Get all records as a list of dicts
-        data = sheet.get_all_records()
-        df = pd.DataFrame(data)
-        # Handle empty sheet case
-        if df.empty:
-             return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
-        return df
-    except Exception as e:
-        # Fallback if connection fails
-        return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
+    """Fetches the leaderboard data from Google Sheets."""
+    sheet = get_google_sheet()
+    if sheet:
+        try:
+            data = sheet.get_all_records()
+            df = pd.DataFrame(data)
+            if df.empty:
+                 return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
+            return df
+        except:
+            return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
+    return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
 
 def save_data(name, major):
-    try:
-        sheet = get_google_sheet()
-        timestamp = str(pd.Timestamp.now())
-        # Append row to Google Sheet
-        sheet.append_row([name, major, timestamp])
-    except Exception as e:
-        st.error(f"Error saving data: {e}")
-# -------------------- Data Storage (CSV) --------------------
-CSV_FILE = "quiz_results.csv"
-
-def load_data():
-    if not os.path.exists(CSV_FILE):
-        return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
-    return pd.read_csv(CSV_FILE)
-
-def save_data(name, major):
-    df = load_data()
-    # Check if name exists to prevent duplicates (optional, basic check)
-    if name not in df["Name"].values:
-        new_entry = pd.DataFrame([[name, major, pd.Timestamp.now()]], columns=["Name", "Major", "Timestamp"])
-        df = pd.concat([df, new_entry], ignore_index=True)
-        df.to_csv(CSV_FILE, index=False)
+    """Saves a new result to Google Sheets."""
+    sheet = get_google_sheet()
+    if sheet:
+        try:
+            timestamp = str(pd.Timestamp.now())
+            sheet.append_row([name, major, timestamp])
+        except Exception as e:
+            st.error(f"Could not save data: {e}")
 
 # -------------------- Helper to Load Local Image --------------------
 def get_img_as_base64(file):
@@ -87,11 +80,8 @@ if os.path.exists("IEEE.jpg"):
 else:
     img_tag = '<div style="text-align:center; font-size:40px; margin-bottom:10px;">IEEE ZC 🦅</div>'
 
-# -------------------- Questions Data (Indirect & Shufflable) --------------------
-# Structure: Each item is a dictionary with 'question' and a list of 'options'.
-# Each option has 'text' and 'type' (DSAI, SWE, IT).
-# We will shuffle the options list before displaying.
-
+# -------------------- Questions Data (Hidden Types) --------------------
+# 25 Questions. Options are shuffled at runtime.
 raw_questions = [
     {
         "q": "1. You are given a complex Lego set without instructions. What is your instinct?",
@@ -221,13 +211,11 @@ if "submitted" not in st.session_state:
 if "user_name" not in st.session_state:
     st.session_state.user_name = ""
 
-# We shuffle options ONCE per session so they don't jump around on every click
+# Shuffle options ONCE per session
 if "shuffled_questions" not in st.session_state:
-    # Deep copy and shuffle options
     shuffled = []
     for item in raw_questions:
         q_copy = item.copy()
-        # Shuffle the list of options
         q_copy["options"] = random.sample(item["options"], len(item["options"]))
         shuffled.append(q_copy)
     st.session_state.shuffled_questions = shuffled
@@ -235,164 +223,64 @@ if "shuffled_questions" not in st.session_state:
 # -------------------- Global Styling --------------------
 st.markdown("""
 <style>
-    /* --- Main Background --- */
     .stApp {
         background: radial-gradient(circle at 50% 10%, #0a192f 0%, #020c1b 100%);
         color: #ccd6f6;
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     }
-
-    /* --- Sticky Header --- */
     .sticky-header-container {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 60px;
-        background: rgba(2, 12, 27, 0.95);
-        backdrop-filter: blur(10px);
-        z-index: 999999;
-        border-bottom: 1px solid rgba(100, 255, 218, 0.2);
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        position: fixed; top: 0; left: 0; width: 100%; height: 60px;
+        background: rgba(2, 12, 27, 0.95); backdrop-filter: blur(10px);
+        z-index: 999999; border-bottom: 1px solid rgba(100, 255, 218, 0.2);
+        display: flex; align-items: center; justify-content: center;
         box-shadow: 0 4px 20px rgba(0,0,0,0.5);
     }
-    
     .header-text {
-        color: #64ffda;
-        font-weight: bold;
-        font-size: 1.2rem;
-        letter-spacing: 1px;
+        color: #64ffda; font-weight: bold; font-size: 1.2rem; letter-spacing: 1px;
     }
-
-    .block-container {
-        padding-top: 80px !important;
-    }
-
-    /* --- Typography --- */
-    h1, h2, h3 {
-        color: #64ffda !important;
-        text-shadow: 0 0 10px rgba(100, 255, 218, 0.3);
-    }
-    
-    /* --- Logo Animation --- */
-    .logo-container {
-        display: flex;
-        justify-content: center;
-        margin-bottom: 20px;
-    }
+    .block-container { padding-top: 80px !important; }
+    h1, h2, h3 { color: #64ffda !important; text-shadow: 0 0 10px rgba(100, 255, 218, 0.3); }
+    .logo-container { display: flex; justify-content: center; margin-bottom: 20px; }
     .logo-img {
-        width: 160px;
-        border-radius: 50%;
-        animation: float 4s ease-in-out infinite;
+        width: 160px; border-radius: 50%; animation: float 4s ease-in-out infinite;
         box-shadow: 0 0 20px rgba(100, 255, 218, 0.2);
     }
     @keyframes float {
-        0% { transform: translateY(0px); }
-        50% { transform: translateY(-10px); }
-        100% { transform: translateY(0px); }
+        0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); }
     }
-
-    /* --- Question Box Styling --- */
     .question-box {
-        background: rgba(17, 34, 64, 0.6);
-        border-left: 4px solid #64ffda;
-        border-radius: 8px;
-        padding: 20px;
-        margin-bottom: 15px;
-        font-size: 1.1rem;
-        font-weight: bold;
-        color: #e6f1ff;
+        background: rgba(17, 34, 64, 0.6); border-left: 4px solid #64ffda;
+        border-radius: 8px; padding: 20px; margin-bottom: 15px;
+        font-size: 1.1rem; font-weight: bold; color: #e6f1ff;
     }
-
-    /* --- Input Field --- */
     .stTextInput input {
-        background-color: rgba(17, 34, 64, 0.8);
-        color: #64ffda;
-        border: 1px solid #64ffda;
-        border-radius: 8px;
-        text-align: center;
-        font-size: 1.2rem;
+        background-color: rgba(17, 34, 64, 0.8); color: #64ffda;
+        border: 1px solid #64ffda; border-radius: 8px; text-align: center; font-size: 1.2rem;
     }
-    .stTextInput label {
-        color: #ccd6f6 !important;
-        font-size: 1.2rem;
-        text-align: center;
-        width: 100%;
-    }
-
-    /* --- Radio Buttons --- */
     .stRadio div[role="radiogroup"] > label {
-        background: rgba(255,255,255,0.03);
-        padding: 15px;
-        border-radius: 10px;
-        margin-bottom: 8px;
-        border: 1px solid transparent;
-        transition: all 0.2s;
-        cursor: pointer;
+        background: rgba(255,255,255,0.03); padding: 15px; border-radius: 10px;
+        margin-bottom: 8px; border: 1px solid transparent; transition: all 0.2s; cursor: pointer;
     }
     .stRadio div[role="radiogroup"] > label:hover {
-        background: rgba(100, 255, 218, 0.1);
-        border-color: #64ffda;
-        color: #64ffda !important;
+        background: rgba(100, 255, 218, 0.1); border-color: #64ffda; color: #64ffda !important;
     }
-
-    /* --- Buttons --- */
     div[data-testid="stFormSubmitButton"] button {
-        background: transparent;
-        color: #64ffda !important;
-        border: 2px solid #64ffda;
-        border-radius: 8px;
-        padding: 10px 30px;
-        font-weight: bold;
-        transition: 0.3s;
-        width: 100%;
+        background: transparent; color: #64ffda !important; border: 2px solid #64ffda;
+        border-radius: 8px; padding: 10px 30px; font-weight: bold; transition: 0.3s; width: 100%;
     }
     div[data-testid="stFormSubmitButton"] button:hover {
-        background: rgba(100, 255, 218, 0.1);
-        box-shadow: 0 0 15px rgba(100, 255, 218, 0.3);
+        background: rgba(100, 255, 218, 0.1); box-shadow: 0 0 15px rgba(100, 255, 218, 0.3);
         transform: scale(1.02);
     }
-    
-    .stButton button {
-        border-radius: 8px;
-        font-weight: bold;
-    }
-
-    /* --- Result & Leaderboard Styling --- */
-    .winner-title {
-        font-size: 3rem;
-        font-weight: 800;
-        color: #64ffda;
-        text-align: center;
-        margin-bottom: 10px;
-    }
-    .winner-desc {
-        font-size: 1.2rem;
-        color: #8892b0;
-        max-width: 600px;
-        margin: 0 auto;
-        text-align: center;
-    }
+    .stButton button { border-radius: 8px; font-weight: bold; }
+    .winner-title { font-size: 3rem; font-weight: 800; color: #64ffda; text-align: center; margin-bottom: 10px; }
+    .winner-desc { font-size: 1.2rem; color: #8892b0; max-width: 600px; margin: 0 auto; text-align: center; }
     .link-btn {
-        display: block;
-        width: fit-content;
-        margin: 20px auto;
-        background: #64ffda;
-        color: #0a192f !important;
-        padding: 12px 30px;
-        border-radius: 5px;
-        text-decoration: none;
-        font-weight: bold;
-        transition: 0.3s;
-        text-align: center;
+        display: block; width: fit-content; margin: 20px auto; background: #64ffda;
+        color: #0a192f !important; padding: 12px 30px; border-radius: 5px;
+        text-decoration: none; font-weight: bold; transition: 0.3s; text-align: center;
     }
-    .link-btn:hover {
-        transform: scale(1.05);
-        box-shadow: 0 0 20px rgba(100, 255, 218, 0.5);
-    }
-
+    .link-btn:hover { transform: scale(1.05); box-shadow: 0 0 20px rgba(100, 255, 218, 0.5); }
     #MainMenu, footer {visibility: hidden;}
 </style>
 """, unsafe_allow_html=True)
@@ -418,7 +306,7 @@ if not st.session_state.submitted:
         # --- STEP 1: ASK FOR NAME & SHOW LEADERBOARD ---
         if st.session_state.user_name == "":
             st.markdown("### First, tell us who you are:")
-            name_input = st.text_input("Enter your full name")
+            name_input = st.text_input("Enter your full name", placeholder="Ex: Hady Saeed")
             
             col1, col2, col3 = st.columns([1,1,1])
             with col2:
@@ -435,16 +323,9 @@ if not st.session_state.submitted:
             
             df = load_data()
             if not df.empty:
-                # Stats
                 counts = df["Major"].value_counts()
                 st.bar_chart(counts, color="#64ffda")
-                
-                # List
-                st.dataframe(
-                    df[["Name", "Major"]].tail(10).iloc[::-1], # Show last 10 reversed
-                    use_container_width=True,
-                    hide_index=True
-                )
+                st.dataframe(df[["Name", "Major"]].tail(10).iloc[::-1], use_container_width=True, hide_index=True)
             else:
                 st.caption("Be the first to answer!")
 
@@ -453,31 +334,18 @@ if not st.session_state.submitted:
             st.info(f"Welcome, **{st.session_state.user_name}**! Let's find your path.")
             
             with st.form("quiz_form"):
-                # Use the SHUFFLED questions from session state
                 for i, q_data in enumerate(st.session_state.shuffled_questions):
                     st.markdown(f'<div class="question-box">{q_data["q"]}</div>', unsafe_allow_html=True)
-                    
-                    # Extract just text for the radio button
                     option_texts = [opt["text"] for opt in q_data["options"]]
-                    
-                    st.radio(
-                        label=f"q_{i}", 
-                        options=option_texts, 
-                        index=None, 
-                        key=f"q_{i}", 
-                        label_visibility="collapsed"
-                    )
+                    st.radio(label=f"q_{i}", options=option_texts, index=None, key=f"q_{i}", label_visibility="collapsed")
                     st.write("") 
 
                 st.markdown("---")
-                
                 submitted = st.form_submit_button("✨ Reveal My Destiny ✨")
                 
                 if submitted:
                     answered_count = 0
                     current_questions = st.session_state.shuffled_questions
-                    
-                    # Check completeness
                     for i in range(len(current_questions)):
                         if st.session_state.get(f"q_{i}"):
                             answered_count += 1
@@ -491,18 +359,13 @@ if not st.session_state.submitted:
 # 2. State: User Submitted (RESULT VIEW)
 else:
     with main_placeholder.container():
-        
         st.markdown(f'<div class="logo-container">{img_tag}</div>', unsafe_allow_html=True)
 
-        # --- Calculate Result using the Hidden Type ---
         scores = {"DSAI": 0, "SWE": 0, "IT": 0}
-        
         current_questions = st.session_state.shuffled_questions
-        
         for i, q_data in enumerate(current_questions):
             user_answer_text = st.session_state.get(f"q_{i}")
             if user_answer_text:
-                # Find which type this answer belongs to
                 for opt in q_data["options"]:
                     if opt["text"] == user_answer_text:
                         scores[opt["type"]] += 1
@@ -512,66 +375,36 @@ else:
         top_matches = [k for k, v in scores.items() if v == max_score]
         winner = top_matches[0]
         
-        # --- Save to CSV (Only once per session) ---
         if "saved" not in st.session_state:
             save_data(st.session_state.user_name, winner)
             st.session_state.saved = True
 
-        # --- Display Result ---
         st.markdown('<div class="result-text">', unsafe_allow_html=True)
         
         if winner == "DSAI":
             st.markdown('<div class="winner-title">🧠 DSAI</div>', unsafe_allow_html=True)
             st.markdown(f"### {st.session_state.user_name}, You are a Data Scientist!")
-            st.markdown("""
-            <div class="winner-desc">
-            You are the <b>Analyst</b>. <br>
-            You see the hidden threads that connect the world. While others see chaos, you see probability, patterns, and predictions.<br>
-            <i>"The numbers don't lie."</i>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown("""<div class="winner-desc">You are the <b>Analyst</b>.<br>You see the hidden threads that connect the world. While others see chaos, you see probability, patterns, and predictions.<br><i>"The numbers don't lie."</i></div>""", unsafe_allow_html=True)
 
         elif winner == "SWE":
             st.markdown('<div class="winner-title">🛠 SWE</div>', unsafe_allow_html=True)
             st.markdown(f"### {st.session_state.user_name}, You are a Software Engineer!")
-            st.markdown("""
-            <div class="winner-desc">
-            You are the <b>Creator</b>. <br>
-            You have the urge to build things that didn't exist before. You look at a problem and immediately think of a tool to fix it.<br>
-            <i>"If you can dream it, I can build it."</i>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown("""<div class="winner-desc">You are the <b>Creator</b>.<br>You have the urge to build things that didn't exist before. You look at a problem and immediately think of a tool to fix it.<br><i>"If you can dream it, I can build it."</i></div>""", unsafe_allow_html=True)
 
         elif winner == "IT":
             st.markdown('<div class="winner-title">🛡️ IT</div>', unsafe_allow_html=True)
             st.markdown(f"### {st.session_state.user_name}, You are an IT Specialist!")
-            st.markdown("""
-            <div class="winner-desc">
-            You are the <b>Architect</b>. <br>
-            You value stability, security, and efficiency. You are the backbone that keeps the digital world from collapsing.<br>
-            <i>"Order out of chaos."</i>
-            </div>
-            """, unsafe_allow_html=True)
+            st.markdown("""<div class="winner-desc">You are the <b>Architect</b>.<br>You value stability, security, and efficiency. You are the backbone that keeps the digital world from collapsing.<br><i>"Order out of chaos."</i></div>""", unsafe_allow_html=True)
             
         st.markdown('</div>', unsafe_allow_html=True)
 
-        st.markdown("""
-            <br>
-            <a href="https://forms.gle/CEu2jWTkhaXwc5dMA" target="_blank" class="link-btn">
-                📝 Sign Up For Your Major Introduction Session Here
-            </a>
-        """, unsafe_allow_html=True)
+        st.markdown("""<br><a href="https://forms.gle/CEu2jWTkhaXwc5dMA" target="_blank" class="link-btn">📝 Sign Up For Your Major Introduction Session Here</a>""", unsafe_allow_html=True)
         
         if st.button("🔄 Play Again", use_container_width=True):
-            # Reset state
             st.session_state.submitted = False
             st.session_state.user_name = ""
-            if "saved" in st.session_state:
-                del st.session_state.saved
-            # Reshuffle for next time
-            if "shuffled_questions" in st.session_state:
-                del st.session_state.shuffled_questions
+            if "saved" in st.session_state: del st.session_state.saved
+            if "shuffled_questions" in st.session_state: del st.session_state.shuffled_questions
             for key in list(st.session_state.keys()):
-                if key.startswith("q_"):
-                    del st.session_state[key]
+                if key.startswith("q_"): del st.session_state.key
             st.rerun()
