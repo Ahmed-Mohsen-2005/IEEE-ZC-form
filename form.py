@@ -15,7 +15,7 @@ st.set_page_config(
 
 # -------------------- Google Sheets Connection --------------------
 @st.cache_resource
-def get_google_sheet():
+def get_google_sheet(ttl=60):
     """Connects to Google Sheets using Streamlit Secrets."""
     try:
         # Load credentials from secrets.toml
@@ -315,7 +315,7 @@ if not st.session_state.submitted:
         # --- STEP 1: ASK FOR NAME & SHOW LEADERBOARD ---
         if st.session_state.user_name == "":
             st.markdown("### First, tell us who you are:")
-            name_input = st.text_input("Enter your full name", placeholder="Ex: Hady Saeed")
+            name_input = st.text_input("Enter your full name")
             
             col1, col2, col3 = st.columns([1,1,1])
             with col2:
