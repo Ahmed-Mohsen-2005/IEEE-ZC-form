@@ -39,18 +39,27 @@ def get_google_sheet():
         return None
 
 def load_data():
-    """Fetches the leaderboard data from Google Sheets."""
+    """Fetches the leaderboard data from Google Sheets safely."""
     sheet = get_google_sheet()
+    default_df = pd.DataFrame(columns=["Name", "Major", "Timestamp"])
+
     if sheet:
         try:
+            # get_all_records uses the first row as headers.
+            # If the sheet is completely empty, it returns []
             data = sheet.get_all_records()
             df = pd.DataFrame(data)
-            if df.empty:
-                 return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
+            
+            # CRITICAL CHECK: If data is empty OR 'Major' column is missing
+            if df.empty or "Major" not in df.columns:
+                return default_df
+                
             return df
-        except:
-            return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
-    return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
+        except Exception as e:
+            # If any error happens (like API timeout), return empty DB
+            return default_df
+            
+    return default_df
 
 def save_data(name, major):
     """Saves a new result to Google Sheets."""
