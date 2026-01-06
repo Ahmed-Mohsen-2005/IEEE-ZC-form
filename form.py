@@ -3,6 +3,8 @@ import base64
 import os
 import pandas as pd
 import random
+import gspread
+from google.oauth2.service_account import Credentials
 
 # -------------------- Page Config --------------------
 st.set_page_config(
@@ -10,7 +12,47 @@ st.set_page_config(
     page_icon="🔮",
     layout="centered"
 )
+@st.cache_resource
+def get_google_sheet():
+    # Load credentials from Streamlit Secrets
+    secrets = st.secrets["gcp_service_account"]
+    
+    # Define the scope
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive"
+    ]
+    
+    # Authenticate
+    creds = Credentials.from_service_account_info(secrets, scopes=scopes)
+    client = gspread.authorize(creds)
+    
+    # Open the sheet by URL (Put your actual sheet URL in secrets too, or hardcode it)
+    sheet_url = st.secrets["private_sheet_url"]
+    return client.open_by_url(sheet_url).sheet1
 
+def load_data():
+    try:
+        sheet = get_google_sheet()
+        # Get all records as a list of dicts
+        data = sheet.get_all_records()
+        df = pd.DataFrame(data)
+        # Handle empty sheet case
+        if df.empty:
+             return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
+        return df
+    except Exception as e:
+        # Fallback if connection fails
+        return pd.DataFrame(columns=["Name", "Major", "Timestamp"])
+
+def save_data(name, major):
+    try:
+        sheet = get_google_sheet()
+        timestamp = str(pd.Timestamp.now())
+        # Append row to Google Sheet
+        sheet.append_row([name, major, timestamp])
+    except Exception as e:
+        st.error(f"Error saving data: {e}")
 # -------------------- Data Storage (CSV) --------------------
 CSV_FILE = "quiz_results.csv"
 
@@ -169,86 +211,6 @@ raw_questions = [
             {"text": "Analyze the sun and moss to calculate a direction.", "type": "DSAI"},
             {"text": "Start building a shelter before it gets dark.", "type": "SWE"},
             {"text": "Find high ground and signal for help securely.", "type": "IT"}
-        ]
-    },
-    {
-        "q": "16. If you were an instrument, you would be:",
-        "options": [
-            {"text": "A Piano – complex, mathematical, and capable of everything.", "type": "DSAI"},
-            {"text": "An Electric Guitar – loud, creative, and limitless.", "type": "SWE"},
-            {"text": "The Drums – the heartbeat that keeps the band together.", "type": "IT"}
-        ]
-    },
-    {
-        "q": "17. A perfect day is:",
-        "options": [
-            {"text": "Learning a mind-blowing new concept.", "type": "DSAI"},
-            {"text": "Finishing a project you've been working on.", "type": "SWE"},
-            {"text": "Having zero unexpected problems.", "type": "IT"}
-        ]
-    },
-    {
-        "q": "18. You see a 'Do Not Press' button. You:",
-        "options": [
-            {"text": "Wonder what the consequences are.", "type": "DSAI"},
-            {"text": "Want to rewire it to do something cool.", "type": "SWE"},
-            {"text": "Make sure no one else presses it.", "type": "IT"}
-        ]
-    },
-    {
-        "q": "19. In a conversation, you usually:",
-        "options": [
-            {"text": "Connect two seemingly unrelated topics.", "type": "DSAI"},
-            {"text": "Drive the conversation to new, fun ideas.", "type": "SWE"},
-            {"text": "Clarify what people mean so everyone understands.", "type": "IT"}
-        ]
-    },
-    {
-        "q": "20. When buying a car, you check:",
-        "options": [
-            {"text": "The specs, data, and efficiency charts.", "type": "DSAI"},
-            {"text": "The customization options and features.", "type": "SWE"},
-            {"text": "The safety rating and reliability warranty.", "type": "IT"}
-        ]
-    },
-    {
-        "q": "21. If you wrote a book, it would be:",
-        "options": [
-            {"text": "A complex mystery thriller.", "type": "DSAI"},
-            {"text": "A fantasy novel with a new world.", "type": "SWE"},
-            {"text": "A guide on how to survive anything.", "type": "IT"}
-        ]
-    },
-    {
-        "q": "22. Looking at the stars, you wonder:",
-        "options": [
-            {"text": "Is there an equation that explains all of this?", "type": "DSAI"},
-            {"text": "Can we build a colony up there one day?", "type": "SWE"},
-            {"text": "How can we protect Earth from asteroids?", "type": "IT"}
-        ]
-    },
-    {
-        "q": "23. Satisfaction is:",
-        "options": [
-            {"text": "Understanding the 'Why'.", "type": "DSAI"},
-            {"text": "Seeing the 'What'.", "type": "SWE"},
-            {"text": "Ensuring the 'How'.", "type": "IT"}
-        ]
-    },
-    {
-        "q": "24. Your ideal workspace is:",
-        "options": [
-            {"text": "Intelligent.", "type": "DSAI"},
-            {"text": "Innovative.", "type": "SWE"},
-            {"text": "Efficient.", "type": "IT"}
-        ]
-    },
-    {
-        "q": "25. Intelligence is:",
-        "options": [
-            {"text": "The ability to predict outcomes from data.", "type": "DSAI"},
-            {"text": "The ability to create tools that didn't exist.", "type": "SWE"},
-            {"text": "The ability to adapt and survive.", "type": "IT"}
         ]
     }
 ]
@@ -456,7 +418,7 @@ if not st.session_state.submitted:
         # --- STEP 1: ASK FOR NAME & SHOW LEADERBOARD ---
         if st.session_state.user_name == "":
             st.markdown("### First, tell us who you are:")
-            name_input = st.text_input("Enter your full name", placeholder="Ex: Hady Saeed")
+            name_input = st.text_input("Enter your full name")
             
             col1, col2, col3 = st.columns([1,1,1])
             with col2:
